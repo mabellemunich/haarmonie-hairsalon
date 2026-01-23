@@ -48,7 +48,7 @@
         import { 
             Trash2, User, Calendar, Scissors, Banknote, CreditCard, 
             StickyNote, X, ChevronRight, ChevronLeft, Lock, LayoutDashboard, 
-            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle
+            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle, ArrowUp, ArrowDown
         } from 'lucide-react';
         
         import { initializeApp } from 'firebase/app';
@@ -435,11 +435,12 @@
                 }
             };
 
+            // VERGRÖßERTE SYMBOLE HIER
             const getMethodIcon = (method) => {
                 switch(method) {
-                case 'Bar': return <Banknote size={14} className="text-emerald-500" />;
-                case 'PayPal': return <CreditCard size={14} className="text-blue-500" />;
-                default: return <StickyNote size={14} className="text-amber-500" />;
+                case 'Bar': return <Banknote size={20} className="text-emerald-500" />;
+                case 'PayPal': return <CreditCard size={20} className="text-blue-500" />;
+                default: return <StickyNote size={20} className="text-amber-500" />;
                 }
             };
 
@@ -529,6 +530,7 @@
                         <div key={entry.id} className="flex flex-col p-3 hover:bg-white transition-colors text-sm group">
                             <div className="flex justify-between items-center mb-1">
                             <div className="flex items-center gap-2">
+                                {/* Hier werden jetzt die größeren Icons verwendet */}
                                 {getMethodIcon(entry.method)}
                                 <span className="font-mono font-bold text-slate-700 text-base">
                                 {Number(entry.amount).toFixed(2)}
@@ -715,6 +717,20 @@
                 setNewEmployeeName('');
             };
 
+            // NEU: Funktion zum Ändern der Reihenfolge
+            const moveEmployee = async (index, direction) => {
+                if (direction === 'up' && index === 0) return;
+                if (direction === 'down' && index === employees.length - 1) return;
+
+                const newList = [...employees];
+                const targetIndex = direction === 'up' ? index - 1 : index + 1;
+                
+                // Swap Elements
+                [newList[index], newList[targetIndex]] = [newList[targetIndex], newList[index]];
+                
+                await onUpdateEmployees(newList);
+            };
+
             const requestToggleStatus = (id, currentStatus) => {
                 // If deactivating (currentStatus is true), ask for confirm
                 if(currentStatus) {
@@ -770,8 +786,7 @@
                 setEditingId(null);
             };
 
-            const visibleEmployees = employees.filter(e => !e.deleted);
-
+            // In Admin we now show ALL employees to allow reordering properly
             return (
                 <div className="fixed inset-0 bg-slate-100 z-50 overflow-y-auto animate-in slide-in-from-right duration-300">
                 
@@ -910,36 +925,56 @@
                     </div>
 
                     <div className="divide-y divide-slate-100">
-                        {visibleEmployees.map((emp) => (
+                        {/* Use ALL employees here to allow reordering including inactive/deleted if desired, though visually filtering might be better for UX. We show all to keep order intact. */}
+                        {employees.map((emp, index) => (
                         <div key={emp.id} className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-slate-50 gap-3">
                             
-                            {/* Name Area */}
+                            {/* Order & Name Area */}
                             <div className="flex items-center gap-3 flex-grow">
-                            <div className={`w-2 h-2 rounded-full ${emp.active ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
-                            
-                            {editingId === emp.id ? (
-                                <div className="flex items-center gap-2">
-                                <input 
-                                    type="text" 
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    className="p-1 border border-rose-300 rounded focus:outline-none focus:ring-2 focus:ring-rose-500"
-                                    autoFocus
-                                />
-                                <button onClick={saveEdit} className="text-emerald-600 hover:bg-emerald-50 p-1 rounded"><Save size={18} /></button>
-                                <button onClick={() => setEditingId(null)} className="text-red-500 hover:bg-red-50 p-1 rounded"><XCircle size={18} /></button>
+                                {/* Reorder Controls */}
+                                <div className="flex flex-col gap-0.5">
+                                    <button 
+                                        onClick={() => moveEmployee(index, 'up')}
+                                        disabled={index === 0}
+                                        className="text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400"
+                                    >
+                                        <ArrowUp size={14} />
+                                    </button>
+                                    <button 
+                                        onClick={() => moveEmployee(index, 'down')}
+                                        disabled={index === employees.length - 1}
+                                        className="text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400"
+                                    >
+                                        <ArrowDown size={14} />
+                                    </button>
                                 </div>
-                            ) : (
-                                <div className="flex items-center gap-2">
-                                <span className={`font-medium ${emp.active ? 'text-slate-700' : 'text-slate-400'}`}>
-                                    {emp.name}
-                                </span>
-                                {!emp.active && <span className="text-xs bg-slate-200 text-slate-500 px-2 py-0.5 rounded">Inaktiv</span>}
-                                <button onClick={() => startEditing(emp)} className="text-slate-300 hover:text-slate-600 p-1">
-                                    <Pencil size={14} />
-                                </button>
-                                </div>
-                            )}
+
+                                <div className={`w-2 h-2 rounded-full ${emp.active ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                                
+                                {editingId === emp.id ? (
+                                    <div className="flex items-center gap-2">
+                                    <input 
+                                        type="text" 
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        className="p-1 border border-rose-300 rounded focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                        autoFocus
+                                    />
+                                    <button onClick={saveEdit} className="text-emerald-600 hover:bg-emerald-50 p-1 rounded"><Save size={18} /></button>
+                                    <button onClick={() => setEditingId(null)} className="text-red-500 hover:bg-red-50 p-1 rounded"><XCircle size={18} /></button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                    <span className={`font-medium ${emp.deleted ? 'text-slate-400 line-through decoration-slate-300' : (emp.active ? 'text-slate-700' : 'text-slate-400')}`}>
+                                        {emp.name}
+                                    </span>
+                                    {!emp.active && !emp.deleted && <span className="text-xs bg-slate-200 text-slate-500 px-2 py-0.5 rounded">Inaktiv</span>}
+                                    {emp.deleted && <span className="text-[10px] text-red-400 font-medium">Gelöscht</span>}
+                                    <button onClick={() => startEditing(emp)} className="text-slate-300 hover:text-slate-600 p-1">
+                                        <Pencil size={14} />
+                                    </button>
+                                    </div>
+                                )}
                             </div>
                             
                             {/* Actions */}
