@@ -1241,6 +1241,11 @@
 
             if (!user) return <div className="flex items-center justify-center h-screen text-slate-400">Lade Salon Daten...</div>;
 
+            // HELPER TO DETERMINE GRID CLASS
+            const gridClass = activeEmployees.length === 4 
+                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2" // FORCE 2 cols for 4 items
+                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"; // Standard 3 cols
+
             return (
                 <div className="min-h-screen bg-slate-100 pb-20 font-sans text-slate-800">
                 
@@ -1351,7 +1356,7 @@
 
                 {/* Main Grid Content */}
                 <main className="max-w-6xl mx-auto px-4 mt-20 relative z-0">
-                    <div className={`grid gap-4 ${activeEmployees.length === 4 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"}`}>
+                    <div className={`grid gap-4 ${gridClass}`}>
                     {activeEmployees.map((emp) => (
                         <div key={emp.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <EmployeeSection
