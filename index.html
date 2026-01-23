@@ -28,6 +28,14 @@
     <style>
         /* Verhindert Pull-to-Refresh auf Mobile */
         body { overscroll-behavior-y: none; }
+        /* Versteckt Scrollbars in Webkit Browsern für saubereren Look in Listen */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800">
@@ -68,7 +76,6 @@
         // --- KONFIGURATION ---
         // ---------------------------------------------------------
         
-        // Deine eingefügte Konfiguration:
         const manualConfig = {
             apiKey: "AIzaSyBu5HjXqSxkxd0MbpvZF_PX5zuMTir7NFo",
             authDomain: "haarmonie-hairsalon.firebaseapp.com",
@@ -79,24 +86,20 @@
         };
 
         // ---------------------------------------------------------
-        // --- INITIALISIERUNG (NICHT ÄNDERN) ---
+        // --- INITIALISIERUNG ---
         // ---------------------------------------------------------
 
         let firebaseConfig;
         let appId;
 
-        // Wir prüfen, ob wir in der Vorschau-Umgebung sind
         if (typeof __firebase_config !== 'undefined') {
-            // In der Vorschau nutzen wir die bereitgestellte Config
             firebaseConfig = JSON.parse(__firebase_config);
             appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         } else {
-            // Wenn wir "live" sind (z.B. Netlify), nutzen wir deine manuellen Daten
             firebaseConfig = manualConfig;
-            appId = 'haarmonie-prod-v1'; // Fester Name für deine Live-App
+            appId = 'haarmonie-prod-v1';
         }
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -172,7 +175,7 @@
             if (!isOpen) return null;
             return (
                 <div className="fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-[2px] animate-in fade-in duration-200">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 mx-4">
                         <div className="flex items-center gap-3 mb-4">
                             <div className={`p-2 rounded-full ${isDestructive ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
                                 <AlertCircle size={24} />
@@ -1156,7 +1159,7 @@
                 )}
 
                 {/* Header */}
-                <header className="bg-slate-900 text-white pt-6 pb-12 px-4 shadow-lg sticky top-0 z-10">
+                <header className="bg-slate-900 text-white pt-6 pb-24 px-4 shadow-lg sticky top-0 z-10 transition-all duration-300">
                     <div className="max-w-6xl mx-auto flex flex-col xl:flex-row justify-between items-center gap-4">
                     
                     {/* Logo & Mobile Admin */}
@@ -1235,7 +1238,7 @@
                 </header>
 
                 {/* Main Grid Content */}
-                <main className="max-w-6xl mx-auto px-4 -mt-2 xl:-mt-6 relative z-0 pt-4">
+                <main className="max-w-6xl mx-auto px-4 -mt-16 relative z-0">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {activeEmployees.map((emp) => (
                         <div key={emp.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
