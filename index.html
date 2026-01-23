@@ -435,7 +435,6 @@
                 }
             };
 
-            // VERGRÖßERTE SYMBOLE HIER
             const getMethodIcon = (method) => {
                 switch(method) {
                 case 'Bar': return <Banknote size={20} className="text-emerald-500" />;
@@ -530,7 +529,6 @@
                         <div key={entry.id} className="flex flex-col p-3 hover:bg-white transition-colors text-sm group">
                             <div className="flex justify-between items-center mb-1">
                             <div className="flex items-center gap-2">
-                                {/* Hier werden jetzt die größeren Icons verwendet */}
                                 {getMethodIcon(entry.method)}
                                 <span className="font-mono font-bold text-slate-700 text-base">
                                 {Number(entry.amount).toFixed(2)}
@@ -1241,9 +1239,9 @@
 
             if (!user) return <div className="flex items-center justify-center h-screen text-slate-400">Lade Salon Daten...</div>;
 
-            // HELPER TO DETERMINE GRID CLASS
+            // Define grid class inside render to be safe
             const gridClass = activeEmployees.length === 4 
-                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2" // FORCE 2 cols for 4 items
+                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2" // FORCE 2 cols for 4 items
                 : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"; // Standard 3 cols
 
             return (
