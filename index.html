@@ -634,6 +634,7 @@
 
         const AdminDashboard = ({ employees, onUpdateEmployees, entries, onClose }) => {
             const [newEmployeeName, setNewEmployeeName] = useState('');
+            const [newEmployeeCashRate, setNewEmployeeCashRate] = useState(100);
             const [editingId, setEditingId] = useState(null);
             const [editName, setEditName] = useState('');
             const [editCashRate, setEditCashRate] = useState(100);
@@ -740,12 +741,13 @@
                     name: newEmployeeName.trim(), 
                     active: true, 
                     deleted: false,
-                    cashRate: 1 // Default 100%
+                    cashRate: newEmployeeCashRate / 100
                 };
                 const updatedList = [...employees, newEmployee];
                 
                 await onUpdateEmployees(updatedList);
                 setNewEmployeeName('');
+                setNewEmployeeCashRate(100);
             };
 
             // NEU: Funktion zum Ändern der Reihenfolge
@@ -939,7 +941,7 @@
                     </div>
                     
                     <div className="p-6 bg-slate-50 border-b border-slate-100">
-                        <form onSubmit={handleAddEmployee} className="flex gap-2 max-w-md">
+                        <form onSubmit={handleAddEmployee} className="flex gap-2 w-full">
                         <input 
                             type="text" 
                             placeholder="Name neuer Mitarbeiter"
@@ -947,11 +949,21 @@
                             onChange={(e) => setNewEmployeeName(e.target.value)}
                             className="flex-grow p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
                         />
+                        <div className="relative w-20 shrink-0">
+                            <input 
+                                type="number" 
+                                value={newEmployeeCashRate}
+                                onChange={(e) => setNewEmployeeCashRate(e.target.value)}
+                                className="w-full p-2 pl-6 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                placeholder="%"
+                            />
+                            <Percent size={12} className="absolute left-2 top-3 text-slate-400"/>
+                        </div>
                         <button 
                             type="submit"
                             className="bg-slate-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-slate-800 flex items-center gap-2"
                         >
-                            <Plus size={18} /> Hinzufügen
+                            <Plus size={18} /> <span className="hidden sm:inline">Hinzufügen</span>
                         </button>
                         </form>
                     </div>
@@ -1012,10 +1024,14 @@
                                         {emp.name}
                                     </span>
                                     
-                                    {/* Display Percentage Badge if not 100% */}
-                                    {emp.cashRate !== undefined && emp.cashRate !== 1 && !emp.deleted && (
-                                        <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold border border-rose-200">
-                                            {Math.round(emp.cashRate * 100)}% Kasse
+                                    {/* Display Percentage Badge ALWAYS, styled differently for 100% */}
+                                    {!emp.deleted && (
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
+                                            (emp.cashRate === undefined || emp.cashRate === 1) 
+                                                ? 'bg-slate-100 text-slate-400 border-slate-200' 
+                                                : 'bg-rose-100 text-rose-600 border-rose-200'
+                                        }`}>
+                                            {emp.cashRate !== undefined ? Math.round(emp.cashRate * 100) : 100}% Kasse
                                         </span>
                                     )}
 
@@ -1145,14 +1161,12 @@
                 return employees.filter(e => e.active && !e.deleted);
             }, [employees]);
 
-            // UPDATED: Grand Total now reflects Salon Share
             const grandTotal = currentEntries.reduce((sum, e) => {
                 const emp = employees.find(em => em.id === e.employeeIndex);
                 const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
                 return sum + ((Number(e.amount) || 0) * rate);
             }, 0);
             
-            // UPDATED: Cash Total reflects Salon Share
             const cashTotal = currentEntries
                 .filter(e => e.method === 'Bar')
                 .reduce((sum, e) => {
@@ -1337,7 +1351,7 @@
 
                 {/* Main Grid Content */}
                 <main className="max-w-6xl mx-auto px-4 mt-20 relative z-0">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className={`grid gap-4 ${activeEmployees.length === 4 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"}`}>
                     {activeEmployees.map((emp) => (
                         <div key={emp.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <EmployeeSection
