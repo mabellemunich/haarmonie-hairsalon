@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haarmonie Hairsalon</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Import Map für saubere Imports im Browser -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.292.0",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"
+      }
+    }
+    </script>
+    
+    <!-- Babel für JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Verhindert Pull-to-Refresh auf Mobile */
+        body { overscroll-behavior-y: none; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { 
+            Trash2, User, Calendar, Scissors, Banknote, CreditCard, 
+            StickyNote, X, ChevronRight, ChevronLeft, Lock, LayoutDashboard, 
+            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle
+        } from 'lucide-react';
+        
+        import { initializeApp } from 'firebase/app';
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken,
+            onAuthStateChanged 
+        } from 'firebase/auth';
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            onSnapshot, 
+            deleteDoc, 
+            doc, 
+            query, 
+            orderBy,
+            serverTimestamp,
+            setDoc,
+            updateDoc
+        } from 'firebase/firestore';
+
+        // ---------------------------------------------------------
+        // --- KONFIGURATION ---
+        // ---------------------------------------------------------
+        
+        // Deine eingefügte Konfiguration:
+        const manualConfig = {
+            apiKey: "AIzaSyBu5HjXqSxkxd0MbpvZF_PX5zuMTir7NFo",
+            authDomain: "haarmonie-hairsalon.firebaseapp.com",
+            projectId: "haarmonie-hairsalon",
+            storageBucket: "haarmonie-hairsalon.firebasestorage.app",
+            messagingSenderId: "855468213220",
+            appId: "1:855468213220:web:1481877cca52ff8c587df1"
+        };
+
+        // ---------------------------------------------------------
+        // --- INITIALISIERUNG (NICHT ÄNDERN) ---
+        // ---------------------------------------------------------
+
+        let firebaseConfig;
+        let appId;
+
+        // Wir prüfen, ob wir in der Vorschau-Umgebung sind
+        if (typeof __firebase_config !== 'undefined') {
+            // In der Vorschau nutzen wir die bereitgestellte Config
+            firebaseConfig = JSON.parse(__firebase_config);
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        } else {
+            // Wenn wir "live" sind (z.B. Netlify), nutzen wir deine manuellen Daten
+            firebaseConfig = manualConfig;
+            appId = 'haarmonie-prod-v1'; // Fester Name für deine Live-App
+        }
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- Helpers ---
+        const getCurrentWeekStr = () => {
+            const d = new Date();
+            d.setHours(0, 0, 0, 0);
+            d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+            const yearStart = new Date(d.getFullYear(), 0, 1);
+            const weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7);
+            return `${d.getFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+        };
+
+        const getRangeFromWeekStr = (weekStr) => {
+            if(!weekStr) {
+                const now = new Date();
+                return { start: now, end: now };
+            }
+            const [yearStr, weekStrVal] = weekStr.split('-W');
+            const year = parseInt(yearStr, 10);
+            const week = parseInt(weekStrVal, 10);
+
+            const dLocal = new Date(year, 0, 4);
+            const day = dLocal.getDay() || 7; 
+            dLocal.setDate(dLocal.getDate() - day + 1); 
+            dLocal.setDate(dLocal.getDate() + (week - 1) * 7); 
+            
+            const start = new Date(dLocal);
+            start.setHours(0,0,0,0);
+            
+            const end = new Date(start);
+            end.setDate(end.getDate() + 6);
+            end.setHours(23,59,59,999);
+            
+            return { start, end };
+        };
+
+        const getStartOfWeek = (date) => {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
+            d.setDate(diff);
+            d.setHours(0, 0, 0, 0);
+            return d;
+        };
+
+        const getEndOfWeek = (date) => {
+            const d = getStartOfWeek(date);
+            d.setDate(d.getDate() + 6);
+            d.setHours(23, 59, 59, 999);
+            return d;
+        };
+
+        const getStartOfMonth = (date) => {
+            const d = new Date(date);
+            d.setDate(1);
+            d.setHours(0, 0, 0, 0);
+            return d;
+        };
+
+        const getEndOfMonth = (date) => {
+            const d = new Date(date);
+            d.setMonth(d.getMonth() + 1);
+            d.setDate(0);
+            d.setHours(23, 59, 59, 999);
+            return d;
+        };
+
+        // --- Components ---
+
+        const ConfirmModal = ({ isOpen, title, message, onConfirm, onClose, isDestructive = true }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-[2px] animate-in fade-in duration-200">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className={`p-2 rounded-full ${isDestructive ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
+                                <AlertCircle size={24} />
+                            </div>
+                            <h3 className="font-bold text-lg text-slate-800">{title}</h3>
+                        </div>
+                        <p className="text-slate-500 mb-6 leading-relaxed text-sm">{message}</p>
+                        <div className="flex gap-3">
+                            <button 
+                                onClick={onClose} 
+                                className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
+                            >
+                                Abbrechen
+                            </button>
+                            <button 
+                                onClick={onConfirm} 
+                                className={`flex-1 py-3 font-bold rounded-xl text-white transition-colors ${isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-900 hover:bg-slate-800'}`}
+                            >
+                                Bestätigen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )
+        };
+
+        const AdminLoginModal = ({ isOpen, onClose, onSuccess }) => {
+            const [pin, setPin] = useState('');
+            const [error, setError] = useState(false);
+            const inputRef = useRef(null);
+
+            useEffect(() => {
+                if (isOpen) {
+                    setPin('');
+                    setError(false);
+                    setTimeout(() => inputRef.current?.focus(), 100);
+                }
+            }, [isOpen]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (pin === '6969') {
+                    onSuccess();
+                    onClose();
+                } else {
+                    setError(true);
+                    setPin('');
+                }
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-slate-900/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[280px] p-6 animate-in zoom-in-95 duration-200">
+                        <div className="flex flex-col items-center mb-6">
+                            <div className="bg-slate-100 p-3 rounded-full mb-3 text-slate-500">
+                                <Lock size={24} />
+                            </div>
+                            <h3 className="font-bold text-slate-800 text-lg">Admin Login</h3>
+                            <p className="text-xs text-slate-400">Bitte PIN eingeben</p>
+                        </div>
+                        
+                        <form onSubmit={handleSubmit}>
+                            <input
+                                ref={inputRef}
+                                type="password"
+                                inputMode="numeric"
+                                value={pin}
+                                onChange={(e) => {
+                                    setPin(e.target.value);
+                                    setError(false);
+                                }}
+                                className={`w-full p-4 text-center text-2xl font-mono font-bold tracking-widest border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all ${
+                                    error ? 'border-red-500 bg-red-50 text-red-600 placeholder-red-300' : 'border-slate-200 bg-slate-50 text-slate-800'
+                                }`}
+                                placeholder="••••"
+                                maxLength={4}
+                            />
+                            {error && <p className="text-red-500 text-xs text-center mt-2 font-medium">Falscher PIN</p>}
+                            
+                            <button
+                            type="submit"
+                            className="w-full mt-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                            >
+                            <span>Entsperren</span>
+                            </button>
+                        </form>
+                        
+                        <button onClick={onClose} className="w-full mt-3 py-2 text-slate-400 text-xs font-medium hover:text-slate-600">
+                            Abbrechen
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const EditEntryModal = ({ isOpen, onClose, onSave, entry }) => {
+            const [amount, setAmount] = useState('');
+            const [method, setMethod] = useState('');
+            const [note, setNote] = useState('');
+
+            useEffect(() => {
+                if (entry) {
+                setAmount(entry.amount);
+                setMethod(entry.method);
+                setNote(entry.note || '');
+                }
+            }, [entry]);
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-[2px] animate-in fade-in duration-200">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-[300px] p-5 animate-in zoom-in-95 duration-200">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-slate-700">Eintrag bearbeiten</h3>
+                            <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
+                                <X size={20}/>
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase">Betrag</label>
+                                <div className="relative mt-1">
+                                    <span className="absolute left-3 top-2 text-slate-400">€</span>
+                                    <input 
+                                        type="number" 
+                                        step="0.01"
+                                        value={amount}
+                                        onChange={(e) => setAmount(e.target.value)}
+                                        className="w-full pl-8 p-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 font-mono font-bold"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase">Zahlungsart</label>
+                                <div className="grid grid-cols-2 gap-2 mt-1">
+                                    <button 
+                                        onClick={() => setMethod('Bar')}
+                                        className={`p-2 rounded-lg border flex items-center justify-center gap-2 ${method === 'Bar' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-500'}`}
+                                    >
+                                        <Banknote size={16} /> Bar
+                                    </button>
+                                    <button 
+                                        onClick={() => setMethod('PayPal')}
+                                        className={`p-2 rounded-lg border flex items-center justify-center gap-2 ${method === 'PayPal' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white border-slate-200 text-slate-500'}`}
+                                    >
+                                        <CreditCard size={16} /> PayPal
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase">Notiz</label>
+                                <textarea
+                                    value={note}
+                                    onChange={(e) => setNote(e.target.value)}
+                                    className="w-full p-2 mt-1 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-sm h-20 resize-none"
+                                    placeholder="Keine Notiz"
+                                />
+                            </div>
+                        </div>
+
+                        <button
+                        onClick={() => onSave(entry.id, { amount: parseFloat(amount), method, note })}
+                        className="w-full mt-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                        <Save size={18} />
+                        <span>Speichern</span>
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const NoteModal = ({ isOpen, onClose, onConfirm, amount }) => {
+            const [note, setNote] = useState('');
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-[2px] animate-in fade-in duration-200">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-[280px] p-4 animate-in zoom-in-95 duration-200">
+                    <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-slate-700">Notiz hinzufügen</h3>
+                    <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
+                        <X size={20}/>
+                    </button>
+                    </div>
+                    
+                    <div className="bg-rose-50 p-3 rounded-lg border border-rose-100 mb-4 text-center">
+                        <span className="text-[10px] text-rose-400 uppercase font-bold tracking-wider">Betrag</span>
+                        <div className="text-2xl font-mono font-bold text-rose-600">
+                        {amount ? Number(amount).toFixed(2) : '0.00'} €
+                        </div>
+                    </div>
+
+                    <textarea
+                    autoFocus
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Was wurde gemacht?"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 min-h-[80px] mb-4 text-sm resize-none"
+                    />
+
+                    <button
+                    onClick={() => onConfirm(note)}
+                    className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                    <span>Buchen</span>
+                    <ChevronRight size={16} />
+                    </button>
+                </div>
+                </div>
+            );
+        };
+
+        const EmployeeSection = ({ employee, entries, onAdd, onDelete, onUpdate, loading }) => {
+            const [amount, setAmount] = useState('');
+            const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+            const [editingEntry, setEditingEntry] = useState(null);
+            
+            const total = useMemo(() => entries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0), [entries]);
+
+            const handleQuickBook = (method) => {
+                if (!amount) return;
+                onAdd(parseFloat(amount), method, '');
+                setAmount('');
+            };
+
+            const handleNoteOpen = () => {
+                if (!amount) return;
+                setIsNoteModalOpen(true);
+            }
+
+            const handleNoteConfirm = (noteText) => {
+                onAdd(parseFloat(amount), 'Notiz', noteText);
+                setAmount('');
+                setIsNoteModalOpen(false);
+            };
+
+            const handleUpdateEntry = (id, data) => {
+                onUpdate(id, data);
+                setEditingEntry(null);
+            };
+
+            const formatTime = (timestamp) => {
+                if (!timestamp) return '';
+                try {
+                const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                } catch (e) {
+                return '';
+                }
+            };
+
+            const getMethodIcon = (method) => {
+                switch(method) {
+                case 'Bar': return <Banknote size={14} className="text-emerald-500" />;
+                case 'PayPal': return <CreditCard size={14} className="text-blue-500" />;
+                default: return <StickyNote size={14} className="text-amber-500" />;
+                }
+            };
+
+            return (
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden relative">
+                <NoteModal 
+                    isOpen={isNoteModalOpen} 
+                    onClose={() => setIsNoteModalOpen(false)} 
+                    onConfirm={handleNoteConfirm}
+                    amount={amount}
+                />
+
+                <EditEntryModal 
+                    isOpen={!!editingEntry}
+                    onClose={() => setEditingEntry(null)}
+                    onSave={handleUpdateEntry}
+                    entry={editingEntry}
+                />
+
+                {/* Header with Name & Total */}
+                <div className="bg-slate-50 p-3 border-b border-slate-100 flex justify-between items-center">
+                    <div className="flex items-center gap-2 flex-grow min-w-0">
+                    <div className="bg-white p-1.5 rounded-full border border-slate-200 text-slate-400 shrink-0">
+                        <User size={16} />
+                    </div>
+                    <h3 className="font-bold text-slate-700 text-xl truncate pr-2">{employee.name}</h3>
+                    </div>
+                    <div className="bg-white text-slate-800 px-2 py-1 rounded-md font-mono font-bold text-base border border-slate-200 shadow-sm shrink-0">
+                    {total.toFixed(2)} €
+                    </div>
+                </div>
+
+                {/* Input Area */}
+                <div className="p-3 bg-white border-b border-slate-100">
+                    <div className="relative mb-3">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span className="text-slate-300 font-bold">€</span>
+                    </div>
+                    <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        className="w-full pl-8 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 font-mono font-bold text-xl text-slate-800 placeholder-slate-300"
+                        value={amount}
+                        onChange={e => setAmount(e.target.value)}
+                    />
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-3 gap-2 h-12">
+                        <button 
+                        onClick={() => handleQuickBook('Bar')}
+                        disabled={loading || !amount}
+                        className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-lg flex flex-col items-center justify-center transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                        >
+                        <Banknote size={18} className="mb-0.5" />
+                        <span className="text-[10px] font-bold uppercase">Bar</span>
+                        </button>
+                        <button 
+                        onClick={() => handleQuickBook('PayPal')}
+                        disabled={loading || !amount}
+                        className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-lg flex flex-col items-center justify-center transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                        >
+                        <CreditCard size={18} className="mb-0.5" />
+                        <span className="text-[10px] font-bold uppercase">PayPal</span>
+                        </button>
+                        <button 
+                        onClick={handleNoteOpen}
+                        disabled={loading || !amount}
+                        className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 rounded-lg flex flex-col items-center justify-center transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                        >
+                        <StickyNote size={18} className="mb-0.5" />
+                        <span className="text-[10px] font-bold uppercase">Notiz</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* List Area */}
+                <div className="flex-grow overflow-y-auto max-h-[300px] bg-slate-50/30">
+                    {entries.length === 0 ? (
+                    <div className="text-center py-8 text-slate-300 text-xs italic">
+                        Keine Umsätze
+                    </div>
+                    ) : (
+                    <div className="divide-y divide-slate-100">
+                        {entries.map((entry) => (
+                        <div key={entry.id} className="flex flex-col p-3 hover:bg-white transition-colors text-sm group">
+                            <div className="flex justify-between items-center mb-1">
+                            <div className="flex items-center gap-2">
+                                {getMethodIcon(entry.method)}
+                                <span className="font-mono font-bold text-slate-700 text-base">
+                                {Number(entry.amount).toFixed(2)}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-slate-400 font-mono text-[10px]">
+                                {entry.timestamp ? formatTime(entry.timestamp) : '--:--'}
+                                </span>
+                                <button
+                                onClick={() => setEditingEntry(entry)}
+                                className="text-slate-300 hover:text-blue-500 p-1 transition-colors opacity-0 group-hover:opacity-100"
+                                >
+                                <Pencil size={14} />
+                                </button>
+                                <button
+                                onClick={() => onDelete(entry.id)}
+                                className="text-slate-300 hover:text-red-500 p-1 transition-colors opacity-0 group-hover:opacity-100"
+                                >
+                                <Trash2 size={14} />
+                                </button>
+                            </div>
+                            </div>
+                            {entry.note && (
+                            <div className="text-xs text-slate-500 pl-6 border-l-2 border-slate-200 ml-1 italic truncate">
+                                {entry.note}
+                            </div>
+                            )}
+                        </div>
+                        ))}
+                    </div>
+                    )}
+                </div>
+                </div>
+            );
+        };
+
+        const StatCard = ({ title, value, cashValue, dateValue, setDate, type, icon: Icon, colorClass }) => {
+            const inputRef = useRef(null);
+
+            const handleContainerClick = () => {
+                if (inputRef.current && typeof inputRef.current.showPicker === 'function') {
+                try {
+                    inputRef.current.showPicker();
+                } catch (e) {
+                    inputRef.current.focus();
+                }
+                } else if (inputRef.current) {
+                    inputRef.current.focus();
+                }
+            };
+
+            return (
+                <div 
+                    onClick={handleContainerClick}
+                    className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between min-h-[140px] cursor-pointer hover:border-slate-300 transition-colors group relative"
+                >
+                <div className="flex justify-between items-start mb-4">
+                    <div className="z-10 relative pointer-events-none">
+                    <p className="text-slate-400 text-xs uppercase font-bold tracking-wider mb-1 group-hover:text-slate-600 transition-colors">{title}</p>
+                    <div className="flex items-center gap-2 mt-2 pointer-events-auto">
+                        {type === 'month' ? (
+                        <input 
+                            ref={inputRef}
+                            type="month"
+                            value={dateValue}
+                            onChange={(e) => setDate(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-400 cursor-pointer hover:bg-slate-100"
+                        />
+                        ) : type === 'week' ? (
+                        <input 
+                            ref={inputRef}
+                            type="week"
+                            value={dateValue}
+                            onChange={(e) => setDate(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-400 cursor-pointer hover:bg-slate-100"
+                        />
+                        ) : (
+                        <input 
+                            ref={inputRef}
+                            type="date"
+                            value={dateValue}
+                            onChange={(e) => setDate(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-400 cursor-pointer hover:bg-slate-100"
+                        />
+                        )}
+                    </div>
+                    </div>
+                    <div className={`p-2 rounded-lg ${colorClass}`}>
+                    <Icon size={20} />
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 className="text-2xl font-mono font-bold text-slate-800">{value} €</h3>
+                    <p className="text-xs text-slate-400 mt-1 font-medium">(Bar: {cashValue} €)</p>
+                </div>
+                </div>
+            );
+        };
+
+        const AdminDashboard = ({ employees, onUpdateEmployees, entries, onClose }) => {
+            const [newEmployeeName, setNewEmployeeName] = useState('');
+            const [editingId, setEditingId] = useState(null);
+            const [editName, setEditName] = useState('');
+            
+            // Confirmation Modal State
+            const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', action: null, isDestructive: true });
+
+            // Independent Date States
+            const [dayDate, setDayDate] = useState(new Date().toISOString().split('T')[0]);
+            const [weekDate, setWeekDate] = useState(getCurrentWeekStr());
+            const [monthDate, setMonthDate] = useState(new Date().toISOString().substring(0, 7)); 
+            const [perfMonthDate, setPerfMonthDate] = useState(new Date().toISOString().substring(0, 7));
+
+            // Stats Calculation Helpers
+            const calculateStats = (dateStr, type) => {
+                let start, end;
+
+                if (type === 'day') {
+                    const dayEntries = entries.filter(e => e.date === dateStr);
+                    const total = dayEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                    const cash = dayEntries.filter(e => e.method === 'Bar').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                    return { total, cash };
+                } 
+                else if (type === 'week') {
+                    const range = getRangeFromWeekStr(dateStr);
+                    start = range.start;
+                    end = range.end;
+                } 
+                else if (type === 'month') {
+                    const d = new Date(dateStr + '-01');
+                    start = getStartOfMonth(d);
+                    end = getEndOfMonth(d);
+                }
+
+                const filtered = entries.filter(e => {
+                    const eDate = e.timestamp ? e.timestamp.toDate() : new Date(e.date);
+                    return eDate >= start && eDate <= end;
+                });
+
+                const total = filtered.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                const cash = filtered.filter(e => e.method === 'Bar').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+                return { total, cash };
+            };
+
+            const dayStats = calculateStats(dayDate, 'day');
+            const weekStats = calculateStats(weekDate, 'week');
+            const monthStats = calculateStats(monthDate, 'month');
+
+            // Employee Performance Stats
+            const employeePerfStats = useMemo(() => {
+                const d = new Date(perfMonthDate + '-01');
+                const start = getStartOfMonth(d);
+                const end = getEndOfMonth(d);
+
+                const filtered = entries.filter(e => {
+                    const eDate = e.timestamp ? e.timestamp.toDate() : new Date(e.date);
+                    return eDate >= start && eDate <= end;
+                });
+
+                return employees
+                .map(emp => {
+                    const empTotal = filtered
+                        .filter(e => e.employeeIndex === emp.id)
+                        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                    return { ...emp, total: empTotal };
+                })
+                .filter(emp => !emp.deleted || emp.total > 0)
+                .sort((a, b) => b.total - a.total); 
+            }, [entries, perfMonthDate, employees]);
+
+
+            const handleAddEmployee = async (e) => {
+                e.preventDefault();
+                if (!newEmployeeName.trim()) return;
+
+                const maxId = employees.reduce((max, emp) => Math.max(max, emp.id), -1);
+                const newEmployee = { id: maxId + 1, name: newEmployeeName.trim(), active: true, deleted: false };
+                const updatedList = [...employees, newEmployee];
+                
+                await onUpdateEmployees(updatedList);
+                setNewEmployeeName('');
+            };
+
+            const requestToggleStatus = (id, currentStatus) => {
+                // If deactivating (currentStatus is true), ask for confirm
+                if(currentStatus) {
+                    setConfirmModal({
+                        isOpen: true,
+                        title: 'Mitarbeiter deaktivieren?',
+                        message: 'Der Mitarbeiter wird nicht mehr auf der Startseite angezeigt, kann aber jederzeit wieder aktiviert werden.',
+                        isDestructive: false,
+                        action: () => performToggleStatus(id)
+                    });
+                } else {
+                    performToggleStatus(id);
+                }
+            };
+
+            const performToggleStatus = async (id) => {
+                const updatedList = employees.map(emp => 
+                emp.id === id ? { ...emp, active: !emp.active } : emp
+                );
+                await onUpdateEmployees(updatedList);
+                setConfirmModal({ ...confirmModal, isOpen: false });
+            };
+
+            const requestDeleteEmployee = (id, name) => {
+                setConfirmModal({
+                    isOpen: true,
+                    title: 'Mitarbeiter löschen?',
+                    message: `Möchtest du "${name}" wirklich löschen? Der Mitarbeiter wird archiviert. Alte Umsätze bleiben in der Statistik erhalten.`,
+                    isDestructive: true,
+                    action: () => performDeleteEmployee(id)
+                });
+            };
+
+            const performDeleteEmployee = async (id) => {
+                const updatedList = employees.map(emp => 
+                    emp.id === id ? { ...emp, active: false, deleted: true } : emp
+                );
+                await onUpdateEmployees(updatedList);
+                setConfirmModal({ ...confirmModal, isOpen: false });
+            };
+
+            const startEditing = (emp) => {
+                setEditingId(emp.id);
+                setEditName(emp.name);
+            };
+
+            const saveEdit = async () => {
+                if (!editName.trim()) return;
+                const updatedList = employees.map(emp => 
+                emp.id === editingId ? { ...emp, name: editName.trim() } : emp
+                );
+                await onUpdateEmployees(updatedList);
+                setEditingId(null);
+            };
+
+            const visibleEmployees = employees.filter(e => !e.deleted);
+
+            return (
+                <div className="fixed inset-0 bg-slate-100 z-50 overflow-y-auto animate-in slide-in-from-right duration-300">
+                
+                <ConfirmModal 
+                    isOpen={confirmModal.isOpen}
+                    title={confirmModal.title}
+                    message={confirmModal.message}
+                    onConfirm={confirmModal.action}
+                    onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                    isDestructive={confirmModal.isDestructive}
+                />
+
+                <div className="max-w-4xl mx-auto p-4 md:p-8">
+                    
+                    {/* Admin Header */}
+                    <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-slate-900 text-white p-2 rounded-lg">
+                        <LayoutDashboard size={24} />
+                        </div>
+                        <div>
+                        <h2 className="text-2xl font-bold text-slate-900">Admin Dashboard</h2>
+                        <p className="text-slate-500">Umsatz & Verwaltung</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={onClose}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 font-medium shadow-sm"
+                    >
+                        <ArrowLeft size={18} />
+                        <span>Zurück</span>
+                    </button>
+                    </div>
+
+                    {/* Stats Grid - Independent Controls */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    <StatCard 
+                        title="Umsatz Tag" 
+                        value={dayStats.total.toFixed(2)} 
+                        cashValue={dayStats.cash.toFixed(2)}
+                        dateValue={dayDate}
+                        setDate={setDayDate}
+                        type="day"
+                        icon={Banknote}
+                        colorClass="bg-emerald-100 text-emerald-600"
+                    />
+                    <StatCard 
+                        title="Umsatz Woche" 
+                        value={weekStats.total.toFixed(2)} 
+                        cashValue={weekStats.cash.toFixed(2)}
+                        dateValue={weekDate}
+                        setDate={setWeekDate}
+                        type="week"
+                        icon={TrendingUp}
+                        colorClass="bg-blue-100 text-blue-600"
+                    />
+                    <StatCard 
+                        title="Umsatz Monat" 
+                        value={monthStats.total.toFixed(2)} 
+                        cashValue={monthStats.cash.toFixed(2)}
+                        dateValue={monthDate}
+                        setDate={setMonthDate}
+                        type="month"
+                        icon={Calendar}
+                        colorClass="bg-rose-100 text-rose-600"
+                    />
+                    </div>
+
+                    {/* Employee Performance Stats */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div className="flex items-center gap-2">
+                                <TrendingUp size={20} className="text-purple-500" />
+                                <h3 className="font-bold text-lg text-slate-800">Leistungsübersicht</h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs uppercase font-bold text-slate-400">Monat:</span>
+                                <input 
+                                    type="month"
+                                    value={perfMonthDate}
+                                    onChange={(e) => setPerfMonthDate(e.target.value)}
+                                    className="bg-white border border-slate-200 rounded px-2 py-1 text-sm font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-rose-400"
+                                />
+                            </div>
+                        </div>
+                        <div className="divide-y divide-slate-100">
+                            {employeePerfStats.map((emp, index) => (
+                                <div key={emp.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
+                                    <div className="flex items-center gap-3">
+                                        <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${emp.deleted ? 'bg-red-100 text-red-500' : 'bg-slate-200 text-slate-500'}`}>
+                                            {index + 1}
+                                        </span>
+                                        <div className="flex flex-col">
+                                            <span className={`font-medium ${emp.deleted ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-700'}`}>
+                                                {emp.name}
+                                            </span>
+                                            {emp.deleted && <span className="text-[10px] text-red-400 font-medium">Gelöscht</span>}
+                                        </div>
+                                    </div>
+                                    <span className="font-mono font-bold text-slate-800 bg-purple-50 text-purple-700 px-3 py-1 rounded-lg">
+                                        {emp.total.toFixed(2)} €
+                                    </span>
+                                </div>
+                            ))}
+                            {employeePerfStats.length === 0 && (
+                                <div className="p-8 text-center text-slate-400 italic">Keine Daten für diesen Monat</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Employee Management */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                        <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                        <Users size={20} className="text-slate-400" />
+                        Mitarbeiter verwalten
+                        </h3>
+                    </div>
+                    
+                    <div className="p-6 bg-slate-50 border-b border-slate-100">
+                        <form onSubmit={handleAddEmployee} className="flex gap-2 max-w-md">
+                        <input 
+                            type="text" 
+                            placeholder="Name neuer Mitarbeiter"
+                            value={newEmployeeName}
+                            onChange={(e) => setNewEmployeeName(e.target.value)}
+                            className="flex-grow p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                        <button 
+                            type="submit"
+                            className="bg-slate-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-slate-800 flex items-center gap-2"
+                        >
+                            <Plus size={18} /> Hinzufügen
+                        </button>
+                        </form>
+                    </div>
+
+                    <div className="divide-y divide-slate-100">
+                        {visibleEmployees.map((emp) => (
+                        <div key={emp.id} className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-slate-50 gap-3">
+                            
+                            {/* Name Area */}
+                            <div className="flex items-center gap-3 flex-grow">
+                            <div className={`w-2 h-2 rounded-full ${emp.active ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                            
+                            {editingId === emp.id ? (
+                                <div className="flex items-center gap-2">
+                                <input 
+                                    type="text" 
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    className="p-1 border border-rose-300 rounded focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                    autoFocus
+                                />
+                                <button onClick={saveEdit} className="text-emerald-600 hover:bg-emerald-50 p-1 rounded"><Save size={18} /></button>
+                                <button onClick={() => setEditingId(null)} className="text-red-500 hover:bg-red-50 p-1 rounded"><XCircle size={18} /></button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                <span className={`font-medium ${emp.active ? 'text-slate-700' : 'text-slate-400'}`}>
+                                    {emp.name}
+                                </span>
+                                {!emp.active && <span className="text-xs bg-slate-200 text-slate-500 px-2 py-0.5 rounded">Inaktiv</span>}
+                                <button onClick={() => startEditing(emp)} className="text-slate-300 hover:text-slate-600 p-1">
+                                    <Pencil size={14} />
+                                </button>
+                                </div>
+                            )}
+                            </div>
+                            
+                            {/* Actions */}
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => requestToggleStatus(emp.id, emp.active)}
+                                    className={`text-sm font-medium px-3 py-1 rounded border transition-colors ${
+                                        emp.active 
+                                        ? 'border-slate-200 text-slate-500 hover:bg-slate-50' 
+                                        : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                                    }`}
+                                    title={emp.active ? 'Mitarbeiter pausieren' : 'Mitarbeiter aktivieren'}
+                                >
+                                    {emp.active ? 'Deaktivieren' : 'Aktivieren'}
+                                </button>
+                                
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        requestDeleteEmployee(emp.id, emp.name);
+                                    }}
+                                    className="p-1.5 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded border border-red-100 transition-colors"
+                                    title="Endgültig löschen (Archivieren)"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        </div>
+                        ))}
+                    </div>
+                    </div>
+                </div>
+                </div>
+            );
+        };
+
+        const MainApp = () => {
+            const [user, setUser] = useState(null);
+            const [entries, setEntries] = useState([]);
+            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+            const [loading, setLoading] = useState(false);
+            const [isAdminOpen, setIsAdminOpen] = useState(false);
+            const [isLoginOpen, setIsLoginOpen] = useState(false);
+            const [entryToDelete, setEntryToDelete] = useState(null);
+            
+            // Default employees if none exist in settings
+            const [employees, setEmployees] = useState([
+                { id: 0, name: 'Mitarbeiter A', active: true, deleted: false },
+                { id: 1, name: 'Mitarbeiter B', active: true, deleted: false },
+                { id: 2, name: 'Mitarbeiter C', active: true, deleted: false }
+            ]);
+
+            // --- Auth Setup ---
+            useEffect(() => {
+                const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+                    if (currentUser) {
+                        setUser(currentUser);
+                    } else {
+                        // Check for custom token provided by environment
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // --- Data Fetching ---
+            useEffect(() => {
+                if (!user) return;
+
+                // 1. Fetch Settings
+                const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
+                const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+                if (docSnap.exists() && docSnap.data().employees) {
+                    setEmployees(docSnap.data().employees);
+                } else {
+                    // Initial Write
+                    setDoc(settingsRef, { 
+                    employees: [
+                        { id: 0, name: 'Mitarbeiter A', active: true, deleted: false },
+                        { id: 1, name: 'Mitarbeiter B', active: true, deleted: false },
+                        { id: 2, name: 'Mitarbeiter C', active: true, deleted: false }
+                    ] 
+                    }, { merge: true });
+                }
+                });
+
+                // 2. Fetch Entries
+                const q = query(
+                collection(db, 'artifacts', appId, 'public', 'data', 'revenue_entries'),
+                orderBy('timestamp', 'desc')
+                );
+
+                const unsubscribeEntries = onSnapshot(q, (snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setEntries(data);
+                }, (error) => {
+                console.error("Error fetching data:", error);
+                });
+
+                return () => {
+                unsubscribeSettings();
+                unsubscribeEntries();
+                };
+            }, [user]);
+
+            // --- Derived State ---
+            const currentEntries = useMemo(() => {
+                return entries.filter(e => e.date === selectedDate);
+            }, [entries, selectedDate]);
+
+            const activeEmployees = useMemo(() => {
+                return employees.filter(e => e.active && !e.deleted);
+            }, [employees]);
+
+            const grandTotal = currentEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+            
+            const cashTotal = currentEntries
+                .filter(e => e.method === 'Bar')
+                .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+            // --- Actions ---
+            const changeDate = (days) => {
+                const d = new Date(selectedDate);
+                d.setDate(d.getDate() + days);
+                setSelectedDate(d.toISOString().split('T')[0]);
+            };
+
+            const handleUpdateEmployees = async (newEmployeeList) => {
+                if (!user) return;
+                try {
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), {
+                    employees: newEmployeeList
+                }, { merge: true });
+                } catch (e) {
+                console.error("Error updating settings:", e);
+                alert("Fehler beim Speichern der Mitarbeiter.");
+                }
+            };
+
+            const handleAddEntry = async (employeeIndex, amount, method, note) => {
+                if (!user) return;
+                setLoading(true);
+                try {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'revenue_entries'), {
+                    amount: Number(amount),
+                    employeeIndex: employeeIndex,
+                    method: method || 'Bar',
+                    note: note || '',
+                    date: selectedDate,
+                    timestamp: serverTimestamp(),
+                    createdBy: user.uid
+                });
+                } catch (e) {
+                console.error("Error adding:", e);
+                } finally {
+                setLoading(false);
+                }
+            };
+
+            const handleUpdateEntry = async (id, updatedData) => {
+                if (!user) return;
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'revenue_entries', id), updatedData);
+                } catch (e) {
+                    console.error("Error updating:", e);
+                }
+            };
+
+            const confirmDeleteEntry = (id) => {
+                setEntryToDelete(id);
+            };
+
+            const performDeleteEntry = async () => {
+                if (!user || !entryToDelete) return;
+                try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'revenue_entries', entryToDelete));
+                } catch (e) {
+                console.error("Error deleting:", e);
+                } finally {
+                    setEntryToDelete(null);
+                }
+            };
+
+            if (!user) return <div className="flex items-center justify-center h-screen text-slate-400">Lade Salon Daten...</div>;
+
+            return (
+                <div className="min-h-screen bg-slate-100 pb-20 font-sans text-slate-800">
+                
+                <ConfirmModal 
+                    isOpen={!!entryToDelete}
+                    title="Eintrag löschen?"
+                    message="Möchtest du diesen Umsatz-Eintrag wirklich entfernen?"
+                    onConfirm={performDeleteEntry}
+                    onClose={() => setEntryToDelete(null)}
+                    isDestructive={true}
+                />
+
+                {/* Login Modal */}
+                <AdminLoginModal 
+                    isOpen={isLoginOpen}
+                    onClose={() => setIsLoginOpen(false)}
+                    onSuccess={() => setIsAdminOpen(true)}
+                />
+
+                {/* Admin Overlay */}
+                {isAdminOpen && (
+                    <AdminDashboard 
+                    employees={employees}
+                    onUpdateEmployees={handleUpdateEmployees}
+                    entries={entries}
+                    onClose={() => setIsAdminOpen(false)}
+                    />
+                )}
+
+                {/* Header */}
+                <header className="bg-slate-900 text-white pt-6 pb-12 px-4 shadow-lg sticky top-0 z-10">
+                    <div className="max-w-6xl mx-auto flex flex-col xl:flex-row justify-between items-center gap-4">
+                    
+                    {/* Logo & Mobile Admin */}
+                    <div className="flex items-center gap-3 w-full xl:w-auto justify-between xl:justify-start">
+                        <div className="flex items-center gap-3">
+                        <div className="bg-rose-500 p-2 rounded-lg shadow-rose-500/20 shadow-lg">
+                            <Scissors className="text-white" size={24} />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold tracking-tight">Haarmonie Hairsalon</h1>
+                            <p className="text-slate-400 text-xs">Tagesübersicht</p>
+                        </div>
+                        </div>
+                        
+                        <button 
+                        onClick={() => setIsLoginOpen(true)}
+                        className="xl:hidden px-3 py-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white flex items-center gap-2 border border-slate-700"
+                        >
+                        <Lock size={16} />
+                        <span className="text-xs font-bold uppercase">Admin</span>
+                        </button>
+                    </div>
+                    
+                    {/* Stats & Date Controls */}
+                    <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto justify-between xl:justify-end">
+                        
+                        {/* Stats Display */}
+                        <div className="flex gap-4 w-full md:w-auto">
+                            {/* Bar Kasse Display */}
+                            <div className="bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 flex-1 md:flex-initial text-center md:text-right">
+                            <div className="flex items-center justify-center md:justify-end gap-1 text-slate-400 text-[10px] uppercase tracking-wider mb-0.5">
+                                <Wallet size={10} />
+                                <span>Bar Kasse</span>
+                            </div>
+                            <span className="text-2xl font-mono font-bold text-emerald-400">{cashTotal.toFixed(2)} €</span>
+                            </div>
+
+                            {/* Grand Total Display */}
+                            <div className="bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 flex-1 md:flex-initial text-center md:text-right">
+                            <span className="text-slate-400 text-[10px] uppercase block tracking-wider mb-0.5">Gesamt Heute</span>
+                            <span className="text-2xl font-mono font-bold text-white">{grandTotal.toFixed(2)} €</span>
+                            </div>
+                        </div>
+
+                        {/* Date Control */}
+                        <div className="flex items-center gap-2">
+                        <div className="flex items-center bg-slate-800 p-1 rounded-lg border border-slate-700">
+                            <button onClick={() => changeDate(-1)} className="p-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
+                            <ChevronLeft size={18} />
+                            </button>
+                            <div className="flex items-center px-2 border-l border-r border-slate-700 h-full">
+                            <Calendar size={16} className="text-slate-400 mr-2" />
+                            <input 
+                                type="date" 
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                className="bg-transparent text-white focus:outline-none text-sm font-medium w-[110px] text-center"
+                            />
+                            </div>
+                            <button onClick={() => changeDate(1)} className="p-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
+                            <ChevronRight size={18} />
+                            </button>
+                        </div>
+                        
+                        <button 
+                            onClick={() => setIsLoginOpen(true)}
+                            className="hidden xl:flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700 h-[42px]"
+                            title="Admin Login"
+                        >
+                            <Lock size={16} />
+                            <span className="text-xs font-bold uppercase">Admin</span>
+                        </button>
+                        </div>
+                    </div>
+                    </div>
+                </header>
+
+                {/* Main Grid Content */}
+                <main className="max-w-6xl mx-auto px-4 -mt-2 xl:-mt-6 relative z-0 pt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {activeEmployees.map((emp) => (
+                        <div key={emp.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <EmployeeSection
+                            employee={emp}
+                            entries={currentEntries.filter(e => e.employeeIndex === emp.id)}
+                            onAdd={(amount, method, note) => handleAddEntry(emp.id, amount, method, note)}
+                            onDelete={confirmDeleteEntry}
+                            onUpdate={handleUpdateEntry}
+                            loading={loading}
+                        />
+                        </div>
+                    ))}
+                    {activeEmployees.length === 0 && (
+                        <div className="col-span-full text-center py-20 bg-white rounded-xl shadow-sm border border-dashed border-slate-300">
+                        <p className="text-slate-500">Keine aktiven Mitarbeiter.</p>
+                        <button onClick={() => setIsLoginOpen(true)} className="text-rose-600 font-bold hover:underline mt-2">
+                            Mitarbeiter im Admin-Bereich anlegen
+                        </button>
+                        </div>
+                    )}
+                    </div>
+                </main>
+
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<MainApp />);
+    </script>
+</body>
+</html>
