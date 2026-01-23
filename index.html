@@ -48,7 +48,7 @@
         import { 
             Trash2, User, Calendar, Scissors, Banknote, CreditCard, 
             StickyNote, X, ChevronRight, ChevronLeft, Lock, LayoutDashboard, 
-            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle, ArrowUp, ArrowDown
+            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle, ArrowUp, ArrowDown, Percent
         } from 'lucide-react';
         
         import { initializeApp } from 'firebase/app';
@@ -636,6 +636,7 @@
             const [newEmployeeName, setNewEmployeeName] = useState('');
             const [editingId, setEditingId] = useState(null);
             const [editName, setEditName] = useState('');
+            const [editCashRate, setEditCashRate] = useState(100);
             
             // Confirmation Modal State
             const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', action: null, isDestructive: true });
@@ -652,8 +653,18 @@
 
                 if (type === 'day') {
                     const dayEntries = entries.filter(e => e.date === dateStr);
-                    const total = dayEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-                    const cash = dayEntries.filter(e => e.method === 'Bar').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                    // Calculates ONLY Salon's Share
+                    const total = dayEntries.reduce((sum, e) => {
+                        const emp = employees.find(em => em.id === e.employeeIndex);
+                        const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
+                        return sum + ((Number(e.amount) || 0) * rate);
+                    }, 0);
+                    
+                    const cash = dayEntries.filter(e => e.method === 'Bar').reduce((sum, e) => {
+                        const emp = employees.find(em => em.id === e.employeeIndex);
+                        const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
+                        return sum + ((Number(e.amount) || 0) * rate);
+                    }, 0);
                     return { total, cash };
                 } 
                 else if (type === 'week') {
@@ -672,8 +683,18 @@
                     return eDate >= start && eDate <= end;
                 });
 
-                const total = filtered.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-                const cash = filtered.filter(e => e.method === 'Bar').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                // Salon Share Calculation
+                const total = filtered.reduce((sum, e) => {
+                    const emp = employees.find(em => em.id === e.employeeIndex);
+                    const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
+                    return sum + ((Number(e.amount) || 0) * rate);
+                }, 0);
+
+                const cash = filtered.filter(e => e.method === 'Bar').reduce((sum, e) => {
+                    const emp = employees.find(em => em.id === e.employeeIndex);
+                    const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
+                    return sum + ((Number(e.amount) || 0) * rate);
+                }, 0);
 
                 return { total, cash };
             };
@@ -682,7 +703,7 @@
             const weekStats = calculateStats(weekDate, 'week');
             const monthStats = calculateStats(monthDate, 'month');
 
-            // Employee Performance Stats
+            // Employee Performance Stats (SHOWS SALON SHARE)
             const employeePerfStats = useMemo(() => {
                 const d = new Date(perfMonthDate + '-01');
                 const start = getStartOfMonth(d);
@@ -697,7 +718,11 @@
                 .map(emp => {
                     const empTotal = filtered
                         .filter(e => e.employeeIndex === emp.id)
-                        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                        .reduce((sum, e) => {
+                            // APPLY RATE
+                            const rate = (emp.cashRate !== undefined) ? emp.cashRate : 1;
+                            return sum + ((Number(e.amount) || 0) * rate);
+                        }, 0);
                     return { ...emp, total: empTotal };
                 })
                 .filter(emp => !emp.deleted || emp.total > 0)
@@ -710,7 +735,13 @@
                 if (!newEmployeeName.trim()) return;
 
                 const maxId = employees.reduce((max, emp) => Math.max(max, emp.id), -1);
-                const newEmployee = { id: maxId + 1, name: newEmployeeName.trim(), active: true, deleted: false };
+                const newEmployee = { 
+                    id: maxId + 1, 
+                    name: newEmployeeName.trim(), 
+                    active: true, 
+                    deleted: false,
+                    cashRate: 1 // Default 100%
+                };
                 const updatedList = [...employees, newEmployee];
                 
                 await onUpdateEmployees(updatedList);
@@ -775,12 +806,13 @@
             const startEditing = (emp) => {
                 setEditingId(emp.id);
                 setEditName(emp.name);
+                setEditCashRate((emp.cashRate !== undefined ? emp.cashRate : 1) * 100);
             };
 
             const saveEdit = async () => {
                 if (!editName.trim()) return;
                 const updatedList = employees.map(emp => 
-                emp.id === editingId ? { ...emp, name: editName.trim() } : emp
+                emp.id === editingId ? { ...emp, name: editName.trim(), cashRate: editCashRate / 100 } : emp
                 );
                 await onUpdateEmployees(updatedList);
                 setEditingId(null);
@@ -952,14 +984,25 @@
                                 <div className={`w-2 h-2 rounded-full ${emp.active ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
                                 
                                 {editingId === emp.id ? (
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                     <input 
                                         type="text" 
                                         value={editName}
                                         onChange={(e) => setEditName(e.target.value)}
-                                        className="p-1 border border-rose-300 rounded focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                        className="p-1 border border-rose-300 rounded focus:outline-none focus:ring-2 focus:ring-rose-500 w-32"
+                                        placeholder="Name"
                                         autoFocus
                                     />
+                                    <div className="relative">
+                                        <input 
+                                            type="number" 
+                                            value={editCashRate}
+                                            onChange={(e) => setEditCashRate(e.target.value)}
+                                            className="p-1 pl-6 border border-rose-300 rounded focus:outline-none focus:ring-2 focus:ring-rose-500 w-16"
+                                            placeholder="%"
+                                        />
+                                        <Percent size={12} className="absolute left-2 top-2 text-slate-400"/>
+                                    </div>
                                     <button onClick={saveEdit} className="text-emerald-600 hover:bg-emerald-50 p-1 rounded"><Save size={18} /></button>
                                     <button onClick={() => setEditingId(null)} className="text-red-500 hover:bg-red-50 p-1 rounded"><XCircle size={18} /></button>
                                     </div>
@@ -968,8 +1011,17 @@
                                     <span className={`font-medium ${emp.deleted ? 'text-slate-400 line-through decoration-slate-300' : (emp.active ? 'text-slate-700' : 'text-slate-400')}`}>
                                         {emp.name}
                                     </span>
+                                    
+                                    {/* Display Percentage Badge if not 100% */}
+                                    {emp.cashRate !== undefined && emp.cashRate !== 1 && !emp.deleted && (
+                                        <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded font-bold border border-rose-200">
+                                            {Math.round(emp.cashRate * 100)}% Kasse
+                                        </span>
+                                    )}
+
                                     {!emp.active && !emp.deleted && <span className="text-xs bg-slate-200 text-slate-500 px-2 py-0.5 rounded">Inaktiv</span>}
                                     {emp.deleted && <span className="text-[10px] text-red-400 font-medium">Gelöscht</span>}
+                                    
                                     <button onClick={() => startEditing(emp)} className="text-slate-300 hover:text-slate-600 p-1">
                                         <Pencil size={14} />
                                     </button>
@@ -1093,11 +1145,22 @@
                 return employees.filter(e => e.active && !e.deleted);
             }, [employees]);
 
-            const grandTotal = currentEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+            // UPDATED: Grand Total now reflects Salon Share
+            const grandTotal = currentEntries.reduce((sum, e) => {
+                const emp = employees.find(em => em.id === e.employeeIndex);
+                const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
+                return sum + ((Number(e.amount) || 0) * rate);
+            }, 0);
             
+            // UPDATED: Cash Total reflects Salon Share
             const cashTotal = currentEntries
                 .filter(e => e.method === 'Bar')
-                .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                .reduce((sum, e) => {
+                    const emp = employees.find(em => em.id === e.employeeIndex);
+                    // Default to 1 (100%) if not defined
+                    const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
+                    return sum + ((Number(e.amount) || 0) * rate);
+                }, 0);
 
             // --- Actions ---
             const changeDate = (days) => {
