@@ -49,7 +49,7 @@
         import { 
             Trash2, User, Calendar, Scissors, Banknote, CreditCard, 
             StickyNote, X, ChevronRight, ChevronLeft, Lock, LayoutDashboard, 
-            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle, ArrowUp, ArrowDown, Percent, Wrench, Calculator
+            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle, ArrowUp, ArrowDown, Percent, Wrench, Loader2
         } from 'lucide-react';
         
         import { initializeApp } from 'firebase/app';
@@ -648,17 +648,11 @@
             const [monthDate, setMonthDate] = useState(new Date().toISOString().substring(0, 7)); 
             const [perfMonthDate, setPerfMonthDate] = useState(new Date().toISOString().substring(0, 7));
 
-            // Correction Tool State
-            const [corrTarget, setCorrTarget] = useState('');
-            const [corrEmpIndex, setCorrEmpIndex] = useState('');
-            const [corrDate, setCorrDate] = useState(new Date().toISOString().split('T')[0]);
-
             const calculateStats = (dateStr, type) => {
                 let start, end;
 
                 if (type === 'day') {
                     const dayEntries = entries.filter(e => e.date === dateStr);
-                    // Calculates ONLY Salon's Share
                     const total = dayEntries.reduce((sum, e) => {
                         const emp = employees.find(em => em.id === e.employeeIndex);
                         const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
@@ -706,27 +700,6 @@
             const dayStats = calculateStats(dayDate, 'day');
             const weekStats = calculateStats(weekDate, 'week');
             const monthStats = calculateStats(monthDate, 'month');
-            
-            // Correction Stats
-            const corrStats = calculateStats(corrDate, 'day');
-            const corrDiff = corrTarget ? (parseFloat(corrTarget) - corrStats.total) : 0;
-
-            const handleCorrectionBooking = () => {
-                if(!corrTarget || !corrEmpIndex) return;
-                
-                // Use the custom prop to add entry
-                onAddEntry(
-                    parseInt(corrEmpIndex), // Employee ID
-                    corrDiff,               // Amount (Difference)
-                    'Korrektur',            // Method (Special so it doesn't affect safe)
-                    'Automatische Korrektur', // Note
-                    corrDate                // Specific Date
-                );
-                
-                setCorrTarget('');
-                alert('Korrektur erfolgreich gebucht!');
-            };
-
 
             const employeePerfStats = useMemo(() => {
                 const d = new Date(perfMonthDate + '-01');
@@ -903,70 +876,6 @@
                         icon={Calendar}
                         colorClass="bg-rose-100 text-rose-600"
                     />
-                    </div>
-
-                    {/* Correction Tool */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <div className="flex items-center gap-2">
-                                <Calculator size={20} className="text-orange-500" />
-                                <h3 className="font-bold text-lg text-slate-800">Tages-Abschluss & Korrektur</h3>
-                            </div>
-                        </div>
-                        <div className="p-6 bg-orange-50/50">
-                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                                 <div>
-                                     <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Datum wählen</label>
-                                     <input 
-                                        type="date" 
-                                        value={corrDate}
-                                        onChange={(e) => setCorrDate(e.target.value)}
-                                        className="w-full p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                                     />
-                                 </div>
-                                 <div>
-                                     <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Soll-Umsatz (Gesamt)</label>
-                                     <input 
-                                        type="number" 
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={corrTarget}
-                                        onChange={(e) => setCorrTarget(e.target.value)}
-                                        className="w-full p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                                     />
-                                 </div>
-                                 <div className="bg-white p-2 rounded-lg border border-slate-200 flex flex-col justify-center h-[42px]">
-                                     <div className="flex justify-between text-xs">
-                                         <span className="text-slate-400">Aktuell:</span>
-                                         <span className="font-bold">{corrStats.total.toFixed(2)} €</span>
-                                     </div>
-                                     <div className="flex justify-between text-xs mt-1">
-                                         <span className="text-orange-600 font-bold">Differenz:</span>
-                                         <span className="font-bold text-orange-600">{corrDiff.toFixed(2)} €</span>
-                                     </div>
-                                 </div>
-                                 <div className="flex gap-2">
-                                     <select 
-                                        className="flex-grow p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-sm"
-                                        value={corrEmpIndex}
-                                        onChange={(e) => setCorrEmpIndex(e.target.value)}
-                                     >
-                                         <option value="">Zuordnen an...</option>
-                                         {employees.filter(e => !e.deleted).map(emp => (
-                                             <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                         ))}
-                                     </select>
-                                     <button 
-                                        onClick={handleCorrectionBooking}
-                                        disabled={!corrTarget || !corrEmpIndex || Math.abs(corrDiff) < 0.01}
-                                        className="bg-slate-900 text-white p-2 rounded-lg hover:bg-slate-800 disabled:opacity-50"
-                                     >
-                                         <Plus size={20} />
-                                     </button>
-                                 </div>
-                             </div>
-                             <p className="text-[10px] text-slate-400 mt-2 italic">* Korrekturbuchungen erhöhen den Gesamtumsatz, aber NICHT die Bar-Kasse (Safe).</p>
-                        </div>
                     </div>
 
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
@@ -1159,6 +1068,7 @@
             const [loading, setLoading] = useState(false);
             const [isAdminOpen, setIsAdminOpen] = useState(false);
             const [isLoginOpen, setIsLoginOpen] = useState(false);
+            const [isInitialLoad, setIsInitialLoad] = useState(true);
             const [entryToDelete, setEntryToDelete] = useState(null);
             
             // Definiere die Mitarbeiter inkl. "Vildan" (ID 2) und "Muhammed" (ID 3),
@@ -1209,6 +1119,7 @@
                         ] 
                     }, { merge: true });
                 }
+                setIsInitialLoad(false);
                 });
 
                 const q = query(
@@ -1239,6 +1150,7 @@
 
             const grandTotal = currentEntries.reduce((sum, e) => {
                 const emp = employees.find(em => em.id === e.employeeIndex);
+                // Default to 1 (100%) if not defined or if employee deleted but still has entries
                 const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
                 return sum + ((Number(e.amount) || 0) * rate);
             }, 0);
@@ -1314,7 +1226,16 @@
                 }
             };
 
-            if (!user) return <div className="flex items-center justify-center h-screen text-slate-400">Lade Salon Daten...</div>;
+            if (!user || isInitialLoad) {
+                return (
+                    <div className="flex flex-col items-center justify-center h-screen bg-slate-100 text-slate-400 gap-4">
+                        <div className="animate-spin text-slate-300">
+                             <TrendingUp size={48} />
+                        </div>
+                        <p className="font-medium animate-pulse">Lade Salon Daten...</p>
+                    </div>
+                );
+            }
 
             const gridClass = activeEmployees.length === 4 
                 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2"
