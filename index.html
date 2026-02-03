@@ -22,28 +22,34 @@
     }
     </script>
     
-    <!-- Babel für JSX -->
+    <!-- Babel für JSX - Version gepinnt für Stabilität -->
     <script src="https://unpkg.com/@babel/standalone@7.23.9/babel.min.js"></script>
 
     <style>
         /* Verhindert Pull-to-Refresh auf Mobile */
         body { overscroll-behavior-y: none; }
-        /* Versteckt Scrollbars in Webkit Browsern */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Versteckt Scrollbars in Webkit Browsern für saubereren Look in Listen */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800">
 
     <div id="root"></div>
 
+    <!-- WICHTIG: data-presets="react" (ohne 'env') verhindert den 'require is not defined' Fehler -->
     <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useEffect, useMemo, useRef } from 'react';
         import { createRoot } from 'react-dom/client';
         import { 
             Trash2, User, Calendar, Scissors, Banknote, CreditCard, 
             StickyNote, X, ChevronRight, ChevronLeft, Lock, LayoutDashboard, 
-            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle, ArrowUp, ArrowDown, Percent
+            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle, ArrowUp, ArrowDown, Percent, Wrench, Calculator
         } from 'lucide-react';
         
         import { initializeApp } from 'firebase/app';
@@ -430,10 +436,12 @@
                 }
             };
 
+            // VERGRÖßERTE SYMBOLE HIER
             const getMethodIcon = (method) => {
                 switch(method) {
                 case 'Bar': return <Banknote size={20} className="text-emerald-500" />;
                 case 'PayPal': return <CreditCard size={20} className="text-blue-500" />;
+                case 'Korrektur': return <Wrench size={16} className="text-purple-500" />; // New icon for correction
                 default: return <StickyNote size={20} className="text-amber-500" />;
                 }
             };
@@ -524,6 +532,7 @@
                         <div key={entry.id} className="flex flex-col p-3 hover:bg-white transition-colors text-sm group">
                             <div className="flex justify-between items-center mb-1">
                             <div className="flex items-center gap-2">
+                                {/* Hier werden jetzt die größeren Icons verwendet */}
                                 {getMethodIcon(entry.method)}
                                 <span className="font-mono font-bold text-slate-700 text-base">
                                 {Number(entry.amount).toFixed(2)}
@@ -625,7 +634,7 @@
             );
         };
 
-        const AdminDashboard = ({ employees, onUpdateEmployees, entries, onClose }) => {
+        const AdminDashboard = ({ employees, onUpdateEmployees, entries, onClose, onAddEntry }) => {
             const [newEmployeeName, setNewEmployeeName] = useState('');
             const [newEmployeeCashRate, setNewEmployeeCashRate] = useState(100);
             const [editingId, setEditingId] = useState(null);
@@ -639,11 +648,17 @@
             const [monthDate, setMonthDate] = useState(new Date().toISOString().substring(0, 7)); 
             const [perfMonthDate, setPerfMonthDate] = useState(new Date().toISOString().substring(0, 7));
 
+            // Correction Tool State
+            const [corrTarget, setCorrTarget] = useState('');
+            const [corrEmpIndex, setCorrEmpIndex] = useState('');
+            const [corrDate, setCorrDate] = useState(new Date().toISOString().split('T')[0]);
+
             const calculateStats = (dateStr, type) => {
                 let start, end;
 
                 if (type === 'day') {
                     const dayEntries = entries.filter(e => e.date === dateStr);
+                    // Calculates ONLY Salon's Share
                     const total = dayEntries.reduce((sum, e) => {
                         const emp = employees.find(em => em.id === e.employeeIndex);
                         const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
@@ -691,6 +706,27 @@
             const dayStats = calculateStats(dayDate, 'day');
             const weekStats = calculateStats(weekDate, 'week');
             const monthStats = calculateStats(monthDate, 'month');
+            
+            // Correction Stats
+            const corrStats = calculateStats(corrDate, 'day');
+            const corrDiff = corrTarget ? (parseFloat(corrTarget) - corrStats.total) : 0;
+
+            const handleCorrectionBooking = () => {
+                if(!corrTarget || !corrEmpIndex) return;
+                
+                // Use the custom prop to add entry
+                onAddEntry(
+                    parseInt(corrEmpIndex), // Employee ID
+                    corrDiff,               // Amount (Difference)
+                    'Korrektur',            // Method (Special so it doesn't affect safe)
+                    'Automatische Korrektur', // Note
+                    corrDate                // Specific Date
+                );
+                
+                setCorrTarget('');
+                alert('Korrektur erfolgreich gebucht!');
+            };
+
 
             const employeePerfStats = useMemo(() => {
                 const d = new Date(perfMonthDate + '-01');
@@ -867,6 +903,70 @@
                         icon={Calendar}
                         colorClass="bg-rose-100 text-rose-600"
                     />
+                    </div>
+
+                    {/* Correction Tool */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div className="flex items-center gap-2">
+                                <Calculator size={20} className="text-orange-500" />
+                                <h3 className="font-bold text-lg text-slate-800">Tages-Abschluss & Korrektur</h3>
+                            </div>
+                        </div>
+                        <div className="p-6 bg-orange-50/50">
+                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                                 <div>
+                                     <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Datum wählen</label>
+                                     <input 
+                                        type="date" 
+                                        value={corrDate}
+                                        onChange={(e) => setCorrDate(e.target.value)}
+                                        className="w-full p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+                                     />
+                                 </div>
+                                 <div>
+                                     <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Soll-Umsatz (Gesamt)</label>
+                                     <input 
+                                        type="number" 
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={corrTarget}
+                                        onChange={(e) => setCorrTarget(e.target.value)}
+                                        className="w-full p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+                                     />
+                                 </div>
+                                 <div className="bg-white p-2 rounded-lg border border-slate-200 flex flex-col justify-center h-[42px]">
+                                     <div className="flex justify-between text-xs">
+                                         <span className="text-slate-400">Aktuell:</span>
+                                         <span className="font-bold">{corrStats.total.toFixed(2)} €</span>
+                                     </div>
+                                     <div className="flex justify-between text-xs mt-1">
+                                         <span className="text-orange-600 font-bold">Differenz:</span>
+                                         <span className="font-bold text-orange-600">{corrDiff.toFixed(2)} €</span>
+                                     </div>
+                                 </div>
+                                 <div className="flex gap-2">
+                                     <select 
+                                        className="flex-grow p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-sm"
+                                        value={corrEmpIndex}
+                                        onChange={(e) => setCorrEmpIndex(e.target.value)}
+                                     >
+                                         <option value="">Zuordnen an...</option>
+                                         {employees.filter(e => !e.deleted).map(emp => (
+                                             <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                         ))}
+                                     </select>
+                                     <button 
+                                        onClick={handleCorrectionBooking}
+                                        disabled={!corrTarget || !corrEmpIndex || Math.abs(corrDiff) < 0.01}
+                                        className="bg-slate-900 text-white p-2 rounded-lg hover:bg-slate-800 disabled:opacity-50"
+                                     >
+                                         <Plus size={20} />
+                                     </button>
+                                 </div>
+                             </div>
+                             <p className="text-[10px] text-slate-400 mt-2 italic">* Korrekturbuchungen erhöhen den Gesamtumsatz, aber NICHT die Bar-Kasse (Safe).</p>
+                        </div>
                     </div>
 
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
@@ -1076,9 +1176,14 @@
                     if (currentUser) {
                         setUser(currentUser);
                     } else {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
+                        try {
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await signInWithCustomToken(auth, __initial_auth_token);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                        } catch (err) {
+                            console.warn("Auth fallback to anonymous:", err);
                             await signInAnonymously(auth);
                         }
                     }
@@ -1142,6 +1247,7 @@
                 .filter(e => e.method === 'Bar')
                 .reduce((sum, e) => {
                     const emp = employees.find(em => em.id === e.employeeIndex);
+                    // Default to 1 (100%) if not defined
                     const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
                     return sum + ((Number(e.amount) || 0) * rate);
                 }, 0);
@@ -1164,7 +1270,7 @@
                 }
             };
 
-            const handleAddEntry = async (employeeIndex, amount, method, note) => {
+            const handleAddEntry = async (employeeIndex, amount, method, note, date = null) => {
                 if (!user) return;
                 setLoading(true);
                 try {
@@ -1173,7 +1279,7 @@
                     employeeIndex: employeeIndex,
                     method: method || 'Bar',
                     note: note || '',
-                    date: selectedDate,
+                    date: date || selectedDate,
                     timestamp: serverTimestamp(),
                     createdBy: user.uid
                 });
@@ -1238,6 +1344,7 @@
                     onUpdateEmployees={handleUpdateEmployees}
                     entries={entries}
                     onClose={() => setIsAdminOpen(false)}
+                    onAddEntry={handleAddEntry}
                     />
                 )}
 
