@@ -436,6 +436,7 @@
                 }
             };
 
+            // VERGRÖßERTE SYMBOLE HIER
             const getMethodIcon = (method) => {
                 switch(method) {
                 case 'Bar': return <Banknote size={20} className="text-emerald-500" />;
@@ -530,6 +531,7 @@
                         <div key={entry.id} className="flex flex-col p-3 hover:bg-white transition-colors text-sm group">
                             <div className="flex justify-between items-center mb-1">
                             <div className="flex items-center gap-2">
+                                {/* Hier werden jetzt die größeren Icons verwendet */}
                                 {getMethodIcon(entry.method)}
                                 <span className="font-mono font-bold text-slate-700 text-base">
                                 {Number(entry.amount).toFixed(2)}
@@ -1067,17 +1069,21 @@
             const [isLoginOpen, setIsLoginOpen] = useState(false);
             const [entryToDelete, setEntryToDelete] = useState(null);
             
+            // Default employees if none exist in settings
             const [employees, setEmployees] = useState([
-                { id: 0, name: 'Mitarbeiter A', active: true, deleted: false },
-                { id: 1, name: 'Mitarbeiter B', active: true, deleted: false },
-                { id: 2, name: 'Mitarbeiter C', active: true, deleted: false }
+                { id: 0, name: 'Mitarbeiter A', active: true, deleted: false, cashRate: 1 },
+                { id: 1, name: 'Mitarbeiter B', active: true, deleted: false, cashRate: 1 },
+                { id: 2, name: 'Mitarbeiter C', active: true, deleted: false, cashRate: 1 },
+                { id: 3, name: 'Mitarbeiter D', active: true, deleted: false, cashRate: 1 }
             ]);
 
+            // --- Auth Setup ---
             useEffect(() => {
                 const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
                     if (currentUser) {
                         setUser(currentUser);
                     } else {
+                        // Check for custom token provided by environment
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                             await signInWithCustomToken(auth, __initial_auth_token);
                         } else {
@@ -1088,24 +1094,29 @@
                 return () => unsubscribe();
             }, []);
 
+            // --- Data Fetching ---
             useEffect(() => {
                 if (!user) return;
 
+                // 1. Fetch Settings
                 const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
                 const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
                 if (docSnap.exists() && docSnap.data().employees) {
                     setEmployees(docSnap.data().employees);
                 } else {
+                    // Initial Write
                     setDoc(settingsRef, { 
                     employees: [
-                        { id: 0, name: 'Mitarbeiter A', active: true, deleted: false },
-                        { id: 1, name: 'Mitarbeiter B', active: true, deleted: false },
-                        { id: 2, name: 'Mitarbeiter C', active: true, deleted: false }
+                        { id: 0, name: 'Mitarbeiter A', active: true, deleted: false, cashRate: 1 },
+                        { id: 1, name: 'Mitarbeiter B', active: true, deleted: false, cashRate: 1 },
+                        { id: 2, name: 'Mitarbeiter C', active: true, deleted: false, cashRate: 1 },
+                        { id: 3, name: 'Mitarbeiter D', active: true, deleted: false, cashRate: 1 }
                     ] 
                     }, { merge: true });
                 }
                 });
 
+                // 2. Fetch Entries
                 const q = query(
                 collection(db, 'artifacts', appId, 'public', 'data', 'revenue_entries'),
                 orderBy('timestamp', 'desc')
@@ -1124,6 +1135,7 @@
                 };
             }, [user]);
 
+            // --- Derived State ---
             const currentEntries = useMemo(() => {
                 return entries.filter(e => e.date === selectedDate);
             }, [entries, selectedDate]);
@@ -1142,10 +1154,12 @@
                 .filter(e => e.method === 'Bar')
                 .reduce((sum, e) => {
                     const emp = employees.find(em => em.id === e.employeeIndex);
+                    // Default to 1 (100%) if not defined
                     const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
                     return sum + ((Number(e.amount) || 0) * rate);
                 }, 0);
 
+            // --- Actions ---
             const changeDate = (days) => {
                 const d = new Date(selectedDate);
                 d.setDate(d.getDate() + days);
@@ -1210,9 +1224,10 @@
 
             if (!user) return <div className="flex items-center justify-center h-screen text-slate-400">Lade Salon Daten...</div>;
 
+            // Define grid class inside render to be safe
             const gridClass = activeEmployees.length === 4 
-                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2"
-                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2" // FORCE 2 cols for 4 items
+                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"; // Standard 3 cols
 
             return (
                 <div className="min-h-screen bg-slate-100 pb-20 font-sans text-slate-800">
@@ -1226,12 +1241,14 @@
                     isDestructive={true}
                 />
 
+                {/* Login Modal */}
                 <AdminLoginModal 
                     isOpen={isLoginOpen}
                     onClose={() => setIsLoginOpen(false)}
                     onSuccess={() => setIsAdminOpen(true)}
                 />
 
+                {/* Admin Overlay */}
                 {isAdminOpen && (
                     <AdminDashboard 
                     employees={employees}
@@ -1241,9 +1258,11 @@
                     />
                 )}
 
+                {/* Header */}
                 <header className="bg-slate-900 text-white pt-4 pb-6 px-4 shadow-lg sticky top-0 z-10 transition-all duration-300">
                     <div className="max-w-6xl mx-auto flex flex-col xl:flex-row justify-between items-center gap-4">
                     
+                    {/* Logo & Mobile Admin */}
                     <div className="flex items-center gap-3 w-full xl:w-auto justify-between xl:justify-start">
                         <div className="flex items-center gap-3">
                         <div className="bg-rose-500 p-2 rounded-lg shadow-rose-500/20 shadow-lg">
@@ -1264,9 +1283,12 @@
                         </button>
                     </div>
                     
+                    {/* Stats & Date Controls */}
                     <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto justify-between xl:justify-end">
                         
+                        {/* Stats Display */}
                         <div className="flex gap-4 w-full md:w-auto">
+                            {/* Bar Kasse Display */}
                             <div className="bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 flex-1 md:flex-initial text-center md:text-right">
                             <div className="flex items-center justify-center md:justify-end gap-1 text-slate-400 text-[10px] uppercase tracking-wider mb-0.5">
                                 <Wallet size={10} />
@@ -1275,12 +1297,14 @@
                             <span className="text-2xl font-mono font-bold text-emerald-400">{cashTotal.toFixed(2)} €</span>
                             </div>
 
+                            {/* Grand Total Display */}
                             <div className="bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 flex-1 md:flex-initial text-center md:text-right">
                             <span className="text-slate-400 text-[10px] uppercase block tracking-wider mb-0.5">Gesamt Heute</span>
                             <span className="text-2xl font-mono font-bold text-white">{grandTotal.toFixed(2)} €</span>
                             </div>
                         </div>
 
+                        {/* Date Control */}
                         <div className="flex items-center gap-2">
                         <div className="flex items-center bg-slate-800 p-1 rounded-lg border border-slate-700">
                             <button onClick={() => changeDate(-1)} className="p-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
@@ -1313,6 +1337,7 @@
                     </div>
                 </header>
 
+                {/* Main Grid Content */}
                 <main className="max-w-6xl mx-auto px-4 mt-20 relative z-0">
                     <div className={`grid gap-4 ${gridClass}`}>
                     {activeEmployees.map((emp) => (
