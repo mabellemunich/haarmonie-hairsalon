@@ -22,8 +22,8 @@
     }
     </script>
     
-    <!-- Babel für JSX -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Babel für JSX - Version gepinnt für Stabilität -->
+    <script src="https://unpkg.com/@babel/standalone@7.23.9/babel.min.js"></script>
 
     <style>
         /* Verhindert Pull-to-Refresh auf Mobile */
@@ -42,7 +42,8 @@
 
     <div id="root"></div>
 
-    <script type="text/babel" data-type="module">
+    <!-- WICHTIG: data-presets="react" (ohne 'env') verhindert den 'require is not defined' Fehler -->
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useEffect, useMemo, useRef } from 'react';
         import { createRoot } from 'react-dom/client';
         import { 
@@ -637,22 +638,18 @@
             const [editName, setEditName] = useState('');
             const [editCashRate, setEditCashRate] = useState(100);
             
-            // Confirmation Modal State
             const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', action: null, isDestructive: true });
 
-            // Independent Date States
             const [dayDate, setDayDate] = useState(new Date().toISOString().split('T')[0]);
             const [weekDate, setWeekDate] = useState(getCurrentWeekStr());
             const [monthDate, setMonthDate] = useState(new Date().toISOString().substring(0, 7)); 
             const [perfMonthDate, setPerfMonthDate] = useState(new Date().toISOString().substring(0, 7));
 
-            // Stats Calculation Helpers
             const calculateStats = (dateStr, type) => {
                 let start, end;
 
                 if (type === 'day') {
                     const dayEntries = entries.filter(e => e.date === dateStr);
-                    // Calculates ONLY Salon's Share
                     const total = dayEntries.reduce((sum, e) => {
                         const emp = employees.find(em => em.id === e.employeeIndex);
                         const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
@@ -682,7 +679,6 @@
                     return eDate >= start && eDate <= end;
                 });
 
-                // Salon Share Calculation
                 const total = filtered.reduce((sum, e) => {
                     const emp = employees.find(em => em.id === e.employeeIndex);
                     const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
@@ -702,7 +698,6 @@
             const weekStats = calculateStats(weekDate, 'week');
             const monthStats = calculateStats(monthDate, 'month');
 
-            // Employee Performance Stats (SHOWS SALON SHARE)
             const employeePerfStats = useMemo(() => {
                 const d = new Date(perfMonthDate + '-01');
                 const start = getStartOfMonth(d);
@@ -718,7 +713,6 @@
                     const empTotal = filtered
                         .filter(e => e.employeeIndex === emp.id)
                         .reduce((sum, e) => {
-                            // APPLY RATE
                             const rate = (emp.cashRate !== undefined) ? emp.cashRate : 1;
                             return sum + ((Number(e.amount) || 0) * rate);
                         }, 0);
@@ -748,7 +742,6 @@
                 setNewEmployeeCashRate(100);
             };
 
-            // NEU: Funktion zum Ändern der Reihenfolge
             const moveEmployee = async (index, direction) => {
                 if (direction === 'up' && index === 0) return;
                 if (direction === 'down' && index === employees.length - 1) return;
@@ -756,14 +749,12 @@
                 const newList = [...employees];
                 const targetIndex = direction === 'up' ? index - 1 : index + 1;
                 
-                // Swap Elements
                 [newList[index], newList[targetIndex]] = [newList[targetIndex], newList[index]];
                 
                 await onUpdateEmployees(newList);
             };
 
             const requestToggleStatus = (id, currentStatus) => {
-                // If deactivating (currentStatus is true), ask for confirm
                 if(currentStatus) {
                     setConfirmModal({
                         isOpen: true,
@@ -818,7 +809,6 @@
                 setEditingId(null);
             };
 
-            // In Admin we now show ALL employees to allow reordering properly
             return (
                 <div className="fixed inset-0 bg-slate-100 z-50 overflow-y-auto animate-in slide-in-from-right duration-300">
                 
@@ -833,7 +823,6 @@
 
                 <div className="max-w-4xl mx-auto p-4 md:p-8">
                     
-                    {/* Admin Header */}
                     <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-3">
                         <div className="bg-slate-900 text-white p-2 rounded-lg">
@@ -853,7 +842,6 @@
                     </button>
                     </div>
 
-                    {/* Stats Grid - Independent Controls */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                     <StatCard 
                         title="Umsatz Tag" 
@@ -887,7 +875,6 @@
                     />
                     </div>
 
-                    {/* Employee Performance Stats */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                             <div className="flex items-center gap-2">
@@ -929,7 +916,6 @@
                         </div>
                     </div>
 
-                    {/* Employee Management */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                         <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
@@ -967,13 +953,10 @@
                     </div>
 
                     <div className="divide-y divide-slate-100">
-                        {/* Use ALL employees here to allow reordering including inactive/deleted if desired, though visually filtering might be better for UX. We show all to keep order intact. */}
                         {employees.map((emp, index) => (
                         <div key={emp.id} className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-slate-50 gap-3">
                             
-                            {/* Order & Name Area */}
                             <div className="flex items-center gap-3 flex-grow">
-                                {/* Reorder Controls */}
                                 <div className="flex flex-col gap-0.5">
                                     <button 
                                         onClick={() => moveEmployee(index, 'up')}
@@ -1022,7 +1005,6 @@
                                         {emp.name}
                                     </span>
                                     
-                                    {/* Display Percentage Badge ALWAYS, styled differently for 100% */}
                                     {!emp.deleted && (
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
                                             (emp.cashRate === undefined || emp.cashRate === 1) 
@@ -1043,7 +1025,6 @@
                                 )}
                             </div>
                             
-                            {/* Actions */}
                             <div className="flex items-center gap-2">
                                 <button 
                                     onClick={() => requestToggleStatus(emp.id, emp.active)}
@@ -1086,20 +1067,17 @@
             const [isLoginOpen, setIsLoginOpen] = useState(false);
             const [entryToDelete, setEntryToDelete] = useState(null);
             
-            // Default employees if none exist in settings
             const [employees, setEmployees] = useState([
                 { id: 0, name: 'Mitarbeiter A', active: true, deleted: false },
                 { id: 1, name: 'Mitarbeiter B', active: true, deleted: false },
                 { id: 2, name: 'Mitarbeiter C', active: true, deleted: false }
             ]);
 
-            // --- Auth Setup ---
             useEffect(() => {
                 const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
                     if (currentUser) {
                         setUser(currentUser);
                     } else {
-                        // Check for custom token provided by environment
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                             await signInWithCustomToken(auth, __initial_auth_token);
                         } else {
@@ -1110,17 +1088,14 @@
                 return () => unsubscribe();
             }, []);
 
-            // --- Data Fetching ---
             useEffect(() => {
                 if (!user) return;
 
-                // 1. Fetch Settings
                 const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
                 const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
                 if (docSnap.exists() && docSnap.data().employees) {
                     setEmployees(docSnap.data().employees);
                 } else {
-                    // Initial Write
                     setDoc(settingsRef, { 
                     employees: [
                         { id: 0, name: 'Mitarbeiter A', active: true, deleted: false },
@@ -1131,7 +1106,6 @@
                 }
                 });
 
-                // 2. Fetch Entries
                 const q = query(
                 collection(db, 'artifacts', appId, 'public', 'data', 'revenue_entries'),
                 orderBy('timestamp', 'desc')
@@ -1150,7 +1124,6 @@
                 };
             }, [user]);
 
-            // --- Derived State ---
             const currentEntries = useMemo(() => {
                 return entries.filter(e => e.date === selectedDate);
             }, [entries, selectedDate]);
@@ -1169,12 +1142,10 @@
                 .filter(e => e.method === 'Bar')
                 .reduce((sum, e) => {
                     const emp = employees.find(em => em.id === e.employeeIndex);
-                    // Default to 1 (100%) if not defined
                     const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
                     return sum + ((Number(e.amount) || 0) * rate);
                 }, 0);
 
-            // --- Actions ---
             const changeDate = (days) => {
                 const d = new Date(selectedDate);
                 d.setDate(d.getDate() + days);
@@ -1239,10 +1210,9 @@
 
             if (!user) return <div className="flex items-center justify-center h-screen text-slate-400">Lade Salon Daten...</div>;
 
-            // Define grid class inside render to be safe
             const gridClass = activeEmployees.length === 4 
-                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2" // FORCE 2 cols for 4 items
-                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"; // Standard 3 cols
+                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2"
+                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
 
             return (
                 <div className="min-h-screen bg-slate-100 pb-20 font-sans text-slate-800">
@@ -1256,14 +1226,12 @@
                     isDestructive={true}
                 />
 
-                {/* Login Modal */}
                 <AdminLoginModal 
                     isOpen={isLoginOpen}
                     onClose={() => setIsLoginOpen(false)}
                     onSuccess={() => setIsAdminOpen(true)}
                 />
 
-                {/* Admin Overlay */}
                 {isAdminOpen && (
                     <AdminDashboard 
                     employees={employees}
@@ -1273,11 +1241,9 @@
                     />
                 )}
 
-                {/* Header */}
                 <header className="bg-slate-900 text-white pt-4 pb-6 px-4 shadow-lg sticky top-0 z-10 transition-all duration-300">
                     <div className="max-w-6xl mx-auto flex flex-col xl:flex-row justify-between items-center gap-4">
                     
-                    {/* Logo & Mobile Admin */}
                     <div className="flex items-center gap-3 w-full xl:w-auto justify-between xl:justify-start">
                         <div className="flex items-center gap-3">
                         <div className="bg-rose-500 p-2 rounded-lg shadow-rose-500/20 shadow-lg">
@@ -1298,12 +1264,9 @@
                         </button>
                     </div>
                     
-                    {/* Stats & Date Controls */}
                     <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto justify-between xl:justify-end">
                         
-                        {/* Stats Display */}
                         <div className="flex gap-4 w-full md:w-auto">
-                            {/* Bar Kasse Display */}
                             <div className="bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 flex-1 md:flex-initial text-center md:text-right">
                             <div className="flex items-center justify-center md:justify-end gap-1 text-slate-400 text-[10px] uppercase tracking-wider mb-0.5">
                                 <Wallet size={10} />
@@ -1312,14 +1275,12 @@
                             <span className="text-2xl font-mono font-bold text-emerald-400">{cashTotal.toFixed(2)} €</span>
                             </div>
 
-                            {/* Grand Total Display */}
                             <div className="bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 flex-1 md:flex-initial text-center md:text-right">
                             <span className="text-slate-400 text-[10px] uppercase block tracking-wider mb-0.5">Gesamt Heute</span>
                             <span className="text-2xl font-mono font-bold text-white">{grandTotal.toFixed(2)} €</span>
                             </div>
                         </div>
 
-                        {/* Date Control */}
                         <div className="flex items-center gap-2">
                         <div className="flex items-center bg-slate-800 p-1 rounded-lg border border-slate-700">
                             <button onClick={() => changeDate(-1)} className="p-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
@@ -1352,7 +1313,6 @@
                     </div>
                 </header>
 
-                {/* Main Grid Content */}
                 <main className="max-w-6xl mx-auto px-4 mt-20 relative z-0">
                     <div className={`grid gap-4 ${gridClass}`}>
                     {activeEmployees.map((emp) => (
