@@ -2,9 +2,70 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Haarmonie Hairsalon</title>
     
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/thumb/c/cce/Scissors_icon_black.svg/512px-Scissors_icon_black.svg.png">
+    <link id="manifest-link" rel="manifest" href="">
+
+    <!-- Dynamisches PWA Setup (Single-File Architektur) -->
+    <script>
+        // 1. Dynamisches App-Manifest erstellen
+        const manifest = {
+            "name": "Haarmonie Hairsalon",
+            "short_name": "Haarmonie",
+            "start_url": window.location.pathname,
+            "display": "standalone",
+            "background_color": "#0f172a",
+            "theme_color": "#0f172a",
+            "icons": [
+                {
+                    "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cce/Scissors_icon_black.svg/192px-Scissors_icon_black.svg.png",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                },
+                {
+                    "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cce/Scissors_icon_black.svg/512px-Scissors_icon_black.svg.png",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                }
+            ]
+        };
+        const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+        document.getElementById('manifest-link').href = URL.createObjectURL(manifestBlob);
+
+        // 2. Dynamischer Service Worker für Offline-Caching & Installierbarkeit
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                const CACHE_NAME = 'haarmonie-v1';
+                self.addEventListener('install', event => {
+                    self.skipWaiting();
+                });
+                self.addEventListener('activate', event => {
+                    event.waitUntil(clients.claim());
+                });
+                self.addEventListener('fetch', event => {
+                    // Netzwerkanfragen durchlassen, bei Fehler Cache nutzen
+                    event.respondWith(
+                        fetch(event.request).catch(() => caches.match(event.request))
+                    );
+                });
+            `;
+            const swBlob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(swBlob);
+            
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register(swUrl)
+                    .then(reg => console.log('PWA Service Worker erfolgreich registriert.'))
+                    .catch(err => console.log('PWA Service Worker Fehler: ', err));
+            });
+        }
+    </script>
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -49,7 +110,7 @@
         import { 
             Trash2, User, Calendar, Scissors, Banknote, CreditCard, 
             StickyNote, X, ChevronRight, ChevronLeft, Lock, LayoutDashboard, 
-            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle, ArrowUp, ArrowDown, Percent, Wrench, Loader2
+            TrendingUp, Users, ArrowLeft, Plus, Pencil, Save, XCircle, Wallet, AlertCircle, ArrowUp, ArrowDown, Percent, Wrench, Loader2, Database
         } from 'lucide-react';
         
         import { initializeApp } from 'firebase/app';
@@ -77,6 +138,7 @@
         // --- KONFIGURATION ---
         // ---------------------------------------------------------
         
+        // DEINE ECHTE CONFIG WIRD JETZT ERZWUNGEN
         const manualConfig = {
             apiKey: "AIzaSyBu5HjXqSxkxd0MbpvZF_PX5zuMTir7NFo",
             authDomain: "haarmonie-hairsalon.firebaseapp.com",
@@ -90,16 +152,13 @@
         // --- INITIALISIERUNG ---
         // ---------------------------------------------------------
 
-        let firebaseConfig;
-        let appId;
-
-        if (typeof __firebase_config !== 'undefined') {
-            firebaseConfig = JSON.parse(__firebase_config);
-            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        } else {
-            firebaseConfig = manualConfig;
-            appId = 'haarmonie-prod-v1';
-        }
+        // Wir nutzen IMMER die manuelle Config, um sicherzustellen, dass
+        // die Daten aus deinem echten Projekt geladen werden.
+        const firebaseConfig = manualConfig;
+        
+        // Feste App ID für deine Live-Datenbank, damit Pfade konsistent sind
+        // Verwende eine eindeutige ID, damit die Daten in Firestore unter diesem Pfad landen
+        const appId = 'haarmonie-live-v1';
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -634,7 +693,7 @@
             );
         };
 
-        const AdminDashboard = ({ employees, onUpdateEmployees, entries, onClose, onAddEntry }) => {
+        const AdminDashboard = ({ employees, onUpdateEmployees, entries, onClose }) => {
             const [newEmployeeName, setNewEmployeeName] = useState('');
             const [newEmployeeCashRate, setNewEmployeeCashRate] = useState(100);
             const [editingId, setEditingId] = useState(null);
@@ -1071,9 +1130,6 @@
             const [isInitialLoad, setIsInitialLoad] = useState(true);
             const [entryToDelete, setEntryToDelete] = useState(null);
             
-            // Definiere die Mitarbeiter inkl. "Vildan" (ID 2) und "Muhammed" (ID 3),
-            // sowie "Feridun" (ID 0) und "Funda" (ID 1).
-            // Diese IDs sind wichtig, damit die Umsatzdaten korrekt zugeordnet werden.
             const [employees, setEmployees] = useState([
                 { id: 0, name: 'Feridun', active: true, deleted: false, cashRate: 1 },
                 { id: 1, name: 'Funda', active: true, deleted: false, cashRate: 1 },
@@ -1150,7 +1206,6 @@
 
             const grandTotal = currentEntries.reduce((sum, e) => {
                 const emp = employees.find(em => em.id === e.employeeIndex);
-                // Default to 1 (100%) if not defined or if employee deleted but still has entries
                 const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
                 return sum + ((Number(e.amount) || 0) * rate);
             }, 0);
@@ -1159,7 +1214,6 @@
                 .filter(e => e.method === 'Bar')
                 .reduce((sum, e) => {
                     const emp = employees.find(em => em.id === e.employeeIndex);
-                    // Default to 1 (100%) if not defined
                     const rate = (emp && emp.cashRate !== undefined) ? emp.cashRate : 1;
                     return sum + ((Number(e.amount) || 0) * rate);
                 }, 0);
@@ -1182,7 +1236,7 @@
                 }
             };
 
-            const handleAddEntry = async (employeeIndex, amount, method, note, date = null) => {
+            const handleAddEntry = async (employeeIndex, amount, method, note) => {
                 if (!user) return;
                 setLoading(true);
                 try {
@@ -1191,7 +1245,7 @@
                     employeeIndex: employeeIndex,
                     method: method || 'Bar',
                     note: note || '',
-                    date: date || selectedDate,
+                    date: selectedDate,
                     timestamp: serverTimestamp(),
                     createdBy: user.uid
                 });
@@ -1233,6 +1287,12 @@
                              <TrendingUp size={48} />
                         </div>
                         <p className="font-medium animate-pulse">Lade Salon Daten...</p>
+                        <div className="flex items-center gap-2 mt-4 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
+                            <Database size={16} className={appId.includes('live') ? 'text-green-500' : 'text-amber-500'} />
+                            <span className="text-xs font-mono text-slate-500">
+                                {appId.includes('live') ? 'Live-Datenbank' : 'Test-Modus'}
+                            </span>
+                        </div>
                     </div>
                 );
             }
@@ -1265,7 +1325,6 @@
                     onUpdateEmployees={handleUpdateEmployees}
                     entries={entries}
                     onClose={() => setIsAdminOpen(false)}
-                    onAddEntry={handleAddEntry}
                     />
                 )}
 
